@@ -1,4 +1,6 @@
 let pc = null;
+let socket = null;
+
 async function start() {
   const localVideo = document.getElementById("localVideo");
   const remoteVideo = document.getElementById("remoteVideo");
@@ -9,41 +11,53 @@ async function start() {
   });
   localVideo.srcObject = stream;
 
-  pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-  });
+  socket = new WebSocket("ws://" + window.location.host + "/ws");
 
-  pc.ontrack = (event) => {
-    console.log("remote stream:", event.streams[0]);
+  socket.onopen = async () => {
+    console.log("WebSocket connected");
+
+    setupWebRTC(stream);
+  };
+
+  socket.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "answer") {
+      console.log("Received Answer");
+      pc.setRemoteDescription({ type: "answer", sdp: msg.data });
+    }
+  };
+
+  const onTrack = (event) => {
+    console.log("Track received:", event.streams[0]);
     remoteVideo.srcObject = event.streams[0];
   };
 
-  stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+  async function setupWebRTC(stream) {
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
 
-  // TODO: Trickle ICE
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+    pc.ontrack = onTrack;
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-  await new Promise((resolve) => {
-    if (pc.iceGatheringState === "complete") {
-      resolve();
-    } else {
-      pc.onicecandidate = (e) => {
-        if (e.candidate === null) {
-          resolve();
-        }
-      };
-    }
-  });
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
-  const response = await fetch("/sdp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(pc.localDescription),
-  });
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === "complete") resolve();
+      else
+        pc.onicecandidate = (e) => {
+          if (!e.candidate) resolve();
+        };
+    });
 
-  const answer = await response.json();
-  await pc.setRemoteDescription(answer);
+    const msg = {
+      type: "offer",
+      data: pc.localDescription.sdp,
+    };
+    socket.send(JSON.stringify(msg));
+    console.log("Offer sent via WebSocket");
+  }
 }
 
 document.getElementById("startButton").onclick = start;

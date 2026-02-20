@@ -1,10 +1,12 @@
 package main
 
 import (
+	"stream-relay/internal/sfu"
 	"stream-relay/internal/signal"
 )
 
 func main() {
-	server := signal.NewHTTPServer(":8080")
+	room := sfu.NewRoom()
+	server := signal.NewHTTPServer(":8080", room)
 	server.ListenAndServe()
 }

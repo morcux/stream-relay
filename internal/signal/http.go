@@ -8,12 +8,15 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func NewHTTPServer(addr string) *http.Server {
+func NewHTTPServer(addr string, room *sfu.Room) *http.Server {
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("/sdp", handleSDP)
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		HandleWebSocket(w, r, room)
+	})
 
 	fs := http.FileServer(http.Dir("web/public"))
-
 	mux.Handle("/", fs)
 
 	return &http.Server{
