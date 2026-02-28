@@ -82,7 +82,18 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request, room *sfu.Room) {
 				Type: "answer",
 				Data: peer.PC.LocalDescription().SDP,
 			}
-			c.WriteJSON(resp)
+			if err := peer.SendJSON(resp); err != nil {
+				log.Println("Write Answer error:", err)
+			}
+		case "answer":
+			fmt.Println("Received Answer from Client")
+			answer := webrtc.SessionDescription{
+				Type: webrtc.SDPTypeAnswer,
+				SDP:  msg.Data,
+			}
+			if err := peer.PC.SetRemoteDescription(answer); err != nil {
+				log.Println("SetRemoteDescription (Answer) error:", err)
+			}
 		}
 	}
 }
